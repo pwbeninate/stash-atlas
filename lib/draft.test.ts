@@ -5,6 +5,7 @@ import {
   emptyDraft,
   evaluateDraft,
   switchDraftMode,
+  switchRothUnit,
   type AccountDraft,
 } from "./draft";
 import { AccountSchema } from "./schema";
@@ -166,6 +167,100 @@ describe("draftFromAccount", () => {
       type: account.type,
       balanceCents: account.balanceCents,
       allocation: account.allocation,
+    });
+  });
+});
+
+describe("Traditional + Roth (mixed) accounts", () => {
+  const base = { type: "mixed" as const, balance: "100,000", percents: { "us-stocks": "100" } };
+
+  it("takes the Roth portion in dollars", () => {
+    const result = evaluateDraft(draft({ ...base, roth: "25,000", rothUnit: "dollars" }), classes);
+    expect(result.value).toMatchObject({ type: "mixed", rothBps: 2500 });
+    expect(result.rothCents).toBe(2_500_000);
+  });
+
+  it("takes the Roth portion in percent", () => {
+    const result = evaluateDraft(draft({ ...base, roth: "30", rothUnit: "percent" }), classes);
+    expect(result.value?.rothBps).toBe(3000);
+    expect(result.rothCents).toBe(3_000_000);
+  });
+
+  it("requires a Roth portion no larger than the balance", () => {
+    expect(evaluateDraft(draft({ ...base, roth: "" }), classes).errors.roth).toMatch(/Roth/);
+    const over = evaluateDraft(draft({ ...base, roth: "100,000.01" }), classes);
+    expect(over.value).toBeNull();
+    expect(over.errors.roth).toMatch(/more than the balance/);
+    expect(evaluateDraft(draft({ ...base, roth: "101", rothUnit: "percent" }), classes).value).toBeNull();
+  });
+
+  it("asks for a percentage when the balance is $0", () => {
+    const zero = { ...base, balance: "0" };
+    expect(evaluateDraft(draft({ ...zero, roth: "0" }), classes).errors.roth).toMatch(/percentage/);
+    expect(
+      evaluateDraft(draft({ ...zero, roth: "40", rothUnit: "percent" }), classes).value?.rothBps,
+    ).toBe(4000);
+  });
+
+  it("works with dollar-mode allocation, where the balance is the sum", () => {
+    const result = evaluateDraft(
+      draft({
+        type: "mixed",
+        mode: "dollars",
+        dollars: { "us-stocks": "600", bonds: "400" },
+        roth: "250",
+      }),
+      classes,
+    );
+    expect(result.value).toMatchObject({ balanceCents: 100_000, rothBps: 2500 });
+  });
+
+  it("ignores the Roth field for other account types", () => {
+    const result = evaluateDraft(draft({ ...base, type: "traditional", roth: "junk" }), classes);
+    expect(result.value).not.toHaveProperty("rothBps");
+    expect(result.errors.roth).toBeUndefined();
+  });
+
+  it("converts between dollars and percent", () => {
+    const start = draft({ ...base, roth: "25,000" });
+    const pct = switchRothUnit(start, classes, "percent");
+    expect(pct).toMatchObject({ rothUnit: "percent", roth: "25" });
+    expect(switchRothUnit(pct, classes, "dollars")).toMatchObject({
+      rothUnit: "dollars",
+      roth: "25000",
+    });
+  });
+
+  it("starts a new split in dollars when an existing account becomes mixed", () => {
+    const account = {
+      id: "t",
+      name: "401(k)",
+      type: "traditional" as const,
+      balanceCents: 100_00,
+      allocation: { cash: 10000 },
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    expect(draftFromAccount(account)).toMatchObject({ roth: "", rothUnit: "dollars" });
+  });
+
+  it("round-trips a saved mixed account", () => {
+    const account = {
+      id: "m",
+      name: "Acme 401(k)",
+      type: "mixed" as const,
+      balanceCents: 21_240_000,
+      allocation: { "us-stocks": 10000 },
+      rothBps: 2550,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    expect(evaluateDraft(draftFromAccount(account), classes).value).toEqual({
+      name: account.name,
+      type: account.type,
+      balanceCents: account.balanceCents,
+      allocation: account.allocation,
+      rothBps: 2550,
     });
   });
 });

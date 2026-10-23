@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
-  byAccountType,
+  accountCells,
   byAssetClass,
+  byTaxTreatment,
   locationMatrix,
   splitAccount,
+  splitByTreatment,
   taxBuckets,
   totalCents,
 } from "./aggregate";
@@ -17,6 +19,7 @@ function account(
   type: AccountType,
   balanceCents: number,
   allocation: Record<string, number>,
+  rothBps?: number,
 ): Account {
   seq += 1;
   return {
@@ -25,6 +28,7 @@ function account(
     type,
     balanceCents,
     allocation,
+    ...(rothBps === undefined ? {} : { rothBps }),
     createdAt: NOW,
     updatedAt: NOW,
   };
@@ -43,7 +47,7 @@ function expectMatrixReconciles(data: PortfolioData) {
     expect(sum(Object.values(row.cells).map((c) => c.cents))).toBe(row.cents);
   }
   for (const col of m.columns) {
-    expect(sum(m.rows.map((r) => r.cells[col.type].cents))).toBe(col.cents);
+    expect(sum(m.rows.map((r) => r.cells[col.treatment].cents))).toBe(col.cents);
   }
   expect(sum(m.rows.map((r) => r.cents))).toBe(m.totalCents);
   expect(sum(m.columns.map((c) => c.cents))).toBe(m.totalCents);
@@ -80,7 +84,7 @@ describe("empty portfolio", () => {
 
   it("has zero totals and no NaN shares", () => {
     expect(totalCents(data.accounts)).toBe(0);
-    for (const s of [...byAssetClass(data), ...taxBuckets(data), ...byAccountType(data)]) {
+    for (const s of [...byAssetClass(data), ...taxBuckets(data), ...byTaxTreatment(data)]) {
       expect(s.cents).toBe(0);
       expect(s.share).toBe(0);
     }
@@ -109,7 +113,7 @@ describe("zero-balance accounts", () => {
       account("taxable", 50_000, { bonds: 10000 }),
     );
     const m = locationMatrix(data);
-    expect(m.columns.map((c) => c.type)).toEqual(["taxable"]);
+    expect(m.columns.map((c) => c.treatment)).toEqual(["taxable"]);
     expect(m.rows.map((r) => r.assetClassId)).toEqual(["bonds"]);
     expect(m.rows[0].cells.taxable.rowShare).toBe(1);
   });
@@ -157,8 +161,8 @@ describe("multi-account portfolio", () => {
     expect(classes.cash).toBe(20_000_00);
   });
 
-  it("aggregates by account type with class splits", () => {
-    const traditional = byAccountType(data).find((t) => t.key === "traditional");
+  it("aggregates by tax treatment with class splits", () => {
+    const traditional = byTaxTreatment(data).find((t) => t.key === "traditional");
     expect(traditional).toMatchObject({
       cents: 200_000_00,
       share: 0.5,
@@ -184,7 +188,7 @@ describe("multi-account portfolio", () => {
     expect(bonds.cells["529"].rowShare).toBeCloseTo(20 / 120, 12);
     expect(bonds.cells.traditional.colShare).toBe(0.5);
     expect(bonds.cells.taxable.cents).toBe(0);
-    expect(m.columns.map((c) => c.type)).toEqual([
+    expect(m.columns.map((c) => c.treatment)).toEqual([
       "taxable",
       "traditional",
       "roth",
@@ -219,5 +223,58 @@ describe("rounding", () => {
 
   it("reconciles the sample portfolio", () => {
     expectMatrixReconciles(samplePortfolio());
+  });
+});
+
+describe("Traditional + Roth (mixed) accounts", () => {
+  const mixed = account("mixed", 100_000_00, { "us-stocks": 6000, bonds: 4000 }, 2500);
+
+  it("splits the balance between traditional and Roth", () => {
+    expect(splitByTreatment(mixed)).toEqual({ traditional: 75_000_00, roth: 25_000_00 });
+    expect(splitByTreatment(account("roth", 5, { cash: 10000 }))).toEqual({ roth: 5 });
+  });
+
+  it("applies the same allocation to both parts", () => {
+    expect(accountCells(mixed, DEFAULT_ASSET_CLASSES)).toEqual([
+      { treatment: "traditional", assetClassId: "us-stocks", cents: 45_000_00 },
+      { treatment: "traditional", assetClassId: "bonds", cents: 30_000_00 },
+      { treatment: "roth", assetClassId: "us-stocks", cents: 15_000_00 },
+      { treatment: "roth", assetClassId: "bonds", cents: 10_000_00 },
+    ]);
+    expect(splitAccount(mixed, DEFAULT_ASSET_CLASSES)).toEqual({
+      "us-stocks": 60_000_00,
+      bonds: 40_000_00,
+    });
+  });
+
+  it("counts toward the Traditional and Roth columns and buckets", () => {
+    const data = portfolio(mixed, account("roth", 10_000_00, { cash: 10000 }));
+    const m = locationMatrix(data);
+    expect(m.columns.map((c) => [c.treatment, c.cents])).toEqual([
+      ["traditional", 75_000_00],
+      ["roth", 35_000_00],
+    ]);
+    const buckets = Object.fromEntries(taxBuckets(data).map((b) => [b.key, b.cents]));
+    expect(buckets).toMatchObject({ pretax: 75_000_00, taxfree: 35_000_00 });
+    expectMatrixReconciles(data);
+  });
+
+  it("handles all-Roth, all-traditional, and odd-cent splits exactly", () => {
+    const thirds = { "us-stocks": 3333, "intl-stocks": 3333, bonds: 3334 };
+    const data = portfolio(
+      account("mixed", 1_000_01, thirds, 0),
+      account("mixed", 1_000_01, thirds, 10000),
+      account("mixed", 7, thirds, 3333),
+      account("mixed", 333_333_33, thirds, 1),
+      account("mixed", 0, thirds, 5000),
+    );
+    expect(splitByTreatment(data.accounts[0])).toEqual({ traditional: 1_000_01, roth: 0 });
+    expect(splitByTreatment(data.accounts[1])).toEqual({ traditional: 0, roth: 1_000_01 });
+    for (const a of data.accounts) {
+      expect(sum(accountCells(a, DEFAULT_ASSET_CLASSES).map((c) => c.cents))).toBe(
+        a.balanceCents,
+      );
+    }
+    expectMatrixReconciles(data);
   });
 });

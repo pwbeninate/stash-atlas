@@ -55,6 +55,14 @@ describe("AccountSchema", () => {
     expect(AccountSchema.safeParse({ ...validAccount, balanceCents }).success).toBe(false);
   });
 
+  it("requires a Roth share on mixed accounts and only there", () => {
+    const mixed = { ...validAccount, type: "mixed" };
+    expect(AccountSchema.safeParse(mixed).success).toBe(false);
+    expect(AccountSchema.safeParse({ ...mixed, rothBps: 3000 }).success).toBe(true);
+    expect(AccountSchema.safeParse({ ...mixed, rothBps: 10001 }).success).toBe(false);
+    expect(AccountSchema.safeParse({ ...validAccount, rothBps: 3000 }).success).toBe(false);
+  });
+
   it("rejects a blank name and unknown type", () => {
     expect(AccountSchema.safeParse({ ...validAccount, name: "   " }).success).toBe(false);
     expect(AccountSchema.safeParse({ ...validAccount, type: "ira" }).success).toBe(false);
@@ -79,6 +87,13 @@ describe("parsePortfolio", () => {
   it("rejects duplicate ids", () => {
     const data = { ...emptyPortfolio(), accounts: [validAccount, validAccount] };
     expect(parsePortfolio(data).ok).toBe(false);
+  });
+
+  it("migrates version 1 data to the current version", () => {
+    const v1 = { ...samplePortfolio(), schemaVersion: 1 };
+    const result = parsePortfolio(v1);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.data.schemaVersion).toBe(2);
   });
 
   it("explains missing or future schema versions", () => {

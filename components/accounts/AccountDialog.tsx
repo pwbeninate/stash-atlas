@@ -9,13 +9,16 @@ import {
   emptyDraft,
   evaluateDraft,
   switchDraftMode,
+  switchRothUnit,
   type AccountDraft,
   type EntryMode,
 } from "@/lib/draft";
+import { formatBps, formatCents } from "@/lib/money";
 import { addAccount, updateAccount } from "@/lib/ops";
 import {
   ACCOUNT_TYPES,
   ACCOUNT_TYPE_LABELS,
+  BPS_TOTAL,
   type Account,
   type AccountType,
   type PortfolioData,
@@ -29,12 +32,15 @@ const FORM_ID = "account-form";
 export function AccountDialog({
   open,
   account,
+  template,
   data,
   onClose,
 }: {
   open: boolean;
   /** Present when editing. */
   account: Account | null;
+  /** Present when duplicating: the new account starts as a copy of this one. */
+  template: Account | null;
   data: PortfolioData;
   onClose: () => void;
 }) {
@@ -42,7 +48,7 @@ export function AccountDialog({
     <Dialog
       open={open}
       onClose={onClose}
-      title={account ? "Edit account" : "Add account"}
+      title={account ? "Edit account" : template ? "Duplicate account" : "Add account"}
       description="Enter the balance and how it's invested. Don't include account numbers."
       size="lg"
       footer={
@@ -54,23 +60,31 @@ export function AccountDialog({
         </>
       }
     >
-      <AccountForm account={account} data={data} onDone={onClose} />
+      <AccountForm account={account} template={template} data={data} onDone={onClose} />
     </Dialog>
   );
 }
 
+function initialDraft(account: Account | null, template: Account | null): AccountDraft {
+  if (account) return draftFromAccount(account);
+  if (template) {
+    return { ...draftFromAccount(template), name: `${template.name} (copy)`.slice(0, 80) };
+  }
+  return emptyDraft();
+}
+
 function AccountForm({
   account,
+  template,
   data,
   onDone,
 }: {
   account: Account | null;
+  template: Account | null;
   data: PortfolioData;
   onDone: () => void;
 }) {
-  const [draft, setDraft] = useState<AccountDraft>(() =>
-    account ? draftFromAccount(account) : emptyDraft(),
-  );
+  const [draft, setDraft] = useState<AccountDraft>(() => initialDraft(account, template));
   const [showErrors, setShowErrors] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const evaluation = useMemo(
@@ -175,6 +189,16 @@ function AccountForm({
         </div>
       </div>
 
+      {draft.type === "mixed" && (
+        <RothSplitInput
+          draft={draft}
+          evaluation={evaluation}
+          showErrors={showErrors}
+          onChange={(roth) => setDraft({ ...draft, roth })}
+          onUnitChange={(unit) => setDraft(switchRothUnit(draft, data.assetClasses, unit))}
+        />
+      )}
+
       <AllocationInput
         draft={draft}
         evaluation={evaluation}
@@ -202,6 +226,77 @@ function AccountForm({
         </p>
       )}
     </form>
+  );
+}
+
+function RothSplitInput({
+  draft,
+  evaluation,
+  showErrors,
+  onChange,
+  onUnitChange,
+}: {
+  draft: AccountDraft;
+  evaluation: ReturnType<typeof evaluateDraft>;
+  showErrors: boolean;
+  onChange: (text: string) => void;
+  onUnitChange: (unit: EntryMode) => void;
+}) {
+  const { balanceCents, rothBps, rothCents, errors } = evaluation;
+  const dollars = draft.rothUnit === "dollars";
+  // Errors like "more than the balance" are useful while typing, not just on save.
+  const error = errors.roth && (showErrors || draft.roth.trim() !== "") ? errors.roth : undefined;
+  const summary =
+    !errors.roth && balanceCents !== null && rothCents !== null && rothBps !== null
+      ? `Traditional ${formatCents(balanceCents - rothCents)} (${formatBps(BPS_TOTAL - rothBps)}) · Roth ${formatCents(rothCents)} (${formatBps(rothBps)})`
+      : null;
+
+  return (
+    <div className="rounded-xl border border-line bg-surface-2/50 p-4">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <Field label="Roth portion" htmlFor="account-roth" error={error} className="w-full sm:w-64">
+          <div className="relative">
+            {dollars && (
+              <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-muted">
+                $
+              </span>
+            )}
+            <input
+              id="account-roth"
+              inputMode="decimal"
+              autoComplete="off"
+              placeholder={dollars ? "0.00" : "0"}
+              value={draft.roth}
+              onChange={(e) => onChange(e.target.value)}
+              aria-invalid={Boolean(error)}
+              aria-describedby="account-roth-help"
+              className={`${inputClass(Boolean(error))} tabular-nums ${dollars ? "pl-7" : "pr-7"}`}
+            />
+            {!dollars && (
+              <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-muted">
+                %
+              </span>
+            )}
+          </div>
+        </Field>
+        <Segmented<EntryMode>
+          label="Enter Roth portion as"
+          value={draft.rothUnit}
+          options={[
+            { value: "dollars", label: "$" },
+            { value: "percent", label: "%" },
+          ]}
+          onChange={onUnitChange}
+        />
+      </div>
+      <p className="mt-3 text-sm text-ink-2 tabular-nums" aria-live="polite">
+        {summary ?? "The rest of the balance counts as traditional (pre-tax)."}
+      </p>
+      <p id="account-roth-help" className="mt-1 text-xs text-muted">
+        Your allocation below applies to both. If the Roth and traditional money are invested
+        differently, add them as two accounts instead.
+      </p>
+    </div>
   );
 }
 

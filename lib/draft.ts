@@ -3,6 +3,7 @@ import {
   bpsToInput,
   centsToInput,
   formatBps,
+  formatCents,
   largestRemainder,
   parseDollarsToCents,
   parsePercentToBps,
@@ -33,6 +34,9 @@ export interface AccountDraft {
   percents: Record<string, string>;
   /** Asset class id → dollar text (dollar mode). */
   dollars: Record<string, string>;
+  /** "mixed" accounts: the Roth portion as text, in `rothUnit`. */
+  roth: string;
+  rothUnit: EntryMode;
 }
 
 export interface AccountFields {
@@ -40,12 +44,15 @@ export interface AccountFields {
   type: AccountType;
   balanceCents: number;
   allocation: Allocation;
+  /** Present only for "mixed" accounts. */
+  rothBps?: number;
 }
 
 export interface DraftErrors {
   name?: string;
   balance?: string;
   allocation?: string;
+  roth?: string;
   /** Asset class id → message for an unparseable entry. */
   fields: Record<string, string>;
 }
@@ -59,13 +66,25 @@ export interface DraftEvaluation {
   centsByClass: Record<string, number>;
   /** Percent mode: 100% minus what's entered. Always 0 in a valid dollar draft. */
   remainingBps: number;
+  /** "mixed" accounts: the parsed Roth share and, when the balance is known, its cents. */
+  rothBps: number | null;
+  rothCents: number | null;
   errors: DraftErrors;
   /** Present only when the draft is saveable. */
   value: AccountFields | null;
 }
 
 export function emptyDraft(type: AccountType = "taxable"): AccountDraft {
-  return { name: "", type, mode: "percent", balance: "", percents: {}, dollars: {} };
+  return {
+    name: "",
+    type,
+    mode: "percent",
+    balance: "",
+    percents: {},
+    dollars: {},
+    roth: "",
+    rothUnit: "dollars",
+  };
 }
 
 export function draftFromAccount(account: Account): AccountDraft {
@@ -80,6 +99,10 @@ export function draftFromAccount(account: Account): AccountDraft {
     balance: centsToInput(account.balanceCents),
     percents,
     dollars: {},
+    // A saved Roth share is stored as a percentage, so show it that way; a new
+    // split starts in dollars, matching how statements report each source.
+    roth: account.rothBps === undefined ? "" : bpsToInput(account.rothBps),
+    rothUnit: account.rothBps === undefined ? "dollars" : "percent",
   };
 }
 
@@ -88,8 +111,55 @@ function hasErrors(errors: DraftErrors): boolean {
     errors.name ||
       errors.balance ||
       errors.allocation ||
+      errors.roth ||
       Object.keys(errors.fields).length,
   );
+}
+
+/** Parse the Roth portion of a "mixed" draft against the (possibly unknown) balance. */
+function evaluateRoth(
+  draft: AccountDraft,
+  balanceCents: number | null,
+  errors: DraftErrors,
+): { rothBps: number | null; rothCents: number | null } {
+  if (draft.type !== "mixed") return { rothBps: null, rothCents: null };
+  const text = draft.roth.trim();
+  if (text === "") {
+    errors.roth = "Enter how much of the balance is Roth.";
+    return { rothBps: null, rothCents: null };
+  }
+
+  if (draft.rothUnit === "percent") {
+    const rothBps = parsePercentToBps(text);
+    if (rothBps === null) {
+      errors.roth = "Use 0–100 with up to 2 decimals.";
+      return { rothBps: null, rothCents: null };
+    }
+    const rothCents =
+      balanceCents === null
+        ? null
+        : largestRemainder(balanceCents, [BPS_TOTAL - rothBps, rothBps])[1];
+    return { rothBps, rothCents };
+  }
+
+  const rothCents = parseDollarsToCents(text);
+  if (rothCents === null) {
+    errors.roth = "Enter a dollar amount.";
+    return { rothBps: null, rothCents: null };
+  }
+  if (balanceCents === null) return { rothBps: null, rothCents };
+  if (rothCents > balanceCents) {
+    errors.roth = `The Roth portion can't be more than the balance (${formatCents(balanceCents)}).`;
+    return { rothBps: null, rothCents };
+  }
+  if (balanceCents === 0) {
+    errors.roth = "With a $0 balance, enter the Roth portion as a percentage.";
+    return { rothBps: null, rothCents };
+  }
+  return {
+    rothBps: largestRemainder(BPS_TOTAL, [balanceCents - rothCents, rothCents])[1],
+    rothCents,
+  };
 }
 
 export function evaluateDraft(
@@ -148,20 +218,25 @@ export function evaluateDraft(
       centsByClass = Object.fromEntries(allocIds.map((id, i) => [id, cents[i]]));
     }
 
+    const roth = evaluateRoth(draft, balanceCents, errors);
     const value =
       !hasErrors(errors) && balanceCents !== null
-        ? {
-            name,
-            type: draft.type,
-            balanceCents,
-            allocation: compactAllocation(bpsByClass),
-          }
+        ? withRoth(
+            {
+              name,
+              type: draft.type,
+              balanceCents,
+              allocation: compactAllocation(bpsByClass),
+            },
+            roth.rothBps,
+          )
         : null;
     return {
       balanceCents,
       bpsByClass,
       centsByClass,
       remainingBps: remaining,
+      ...roth,
       errors,
       value,
     };
@@ -184,18 +259,42 @@ export function evaluateDraft(
     errors.allocation = "Enter at least one amount above $0.";
   }
 
+  const roth = evaluateRoth(draft, balanceCents, errors);
   const value =
     !hasErrors(errors) && derived
-      ? { name, type: draft.type, ...derived }
+      ? withRoth({ name, type: draft.type, ...derived }, roth.rothBps)
       : null;
   return {
     balanceCents,
     bpsByClass,
     centsByClass,
     remainingBps: derived ? 0 : BPS_TOTAL,
+    ...roth,
     errors,
     value,
   };
+}
+
+function withRoth(fields: AccountFields, rothBps: number | null): AccountFields {
+  return fields.type === "mixed" && rothBps !== null ? { ...fields, rothBps } : fields;
+}
+
+/** Switch the Roth portion between dollars and percent, converting when possible. */
+export function switchRothUnit(
+  draft: AccountDraft,
+  assetClasses: AssetClass[],
+  rothUnit: EntryMode,
+): AccountDraft {
+  if (draft.rothUnit === rothUnit) return draft;
+  const { rothBps, rothCents, errors } = evaluateDraft(draft, assetClasses);
+  if (errors.roth) return { ...draft, rothUnit };
+  if (rothUnit === "dollars" && rothCents !== null) {
+    return { ...draft, rothUnit, roth: centsToInput(rothCents) };
+  }
+  if (rothUnit === "percent" && rothBps !== null) {
+    return { ...draft, rothUnit, roth: bpsToInput(rothBps) };
+  }
+  return { ...draft, rothUnit };
 }
 
 /**

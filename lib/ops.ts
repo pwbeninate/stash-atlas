@@ -23,8 +23,12 @@ export function updateAccount(
 ): PortfolioData {
   return {
     ...data,
+    // Rebuild rather than merge so fields that no longer apply (like rothBps
+    // after leaving "mixed") are dropped.
     accounts: data.accounts.map((a) =>
-      a.id === id ? { ...a, ...fields, updatedAt: now.toISOString() } : a,
+      a.id === id
+        ? { id: a.id, ...fields, createdAt: a.createdAt, updatedAt: now.toISOString() }
+        : a,
     ),
   };
 }

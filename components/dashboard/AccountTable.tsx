@@ -2,8 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { Card } from "@/components/ui/Card";
-import { PencilIcon, SortIcon, TrashIcon } from "@/components/ui/icons";
-import { formatCents, formatPercent, ratio } from "@/lib/money";
+import { CopyIcon, PencilIcon, SortIcon, TrashIcon } from "@/components/ui/icons";
+import { formatBps, formatCents, formatPercent, ratio } from "@/lib/money";
 import {
   ACCOUNT_TYPES,
   ACCOUNT_TYPE_LABELS,
@@ -32,13 +32,74 @@ function compare(a: Account, b: Account, key: SortKey): number {
   }
 }
 
+/** "Traditional + Roth" accounts also show their Roth share. */
+function TypeLabel({ account }: { account: Account }) {
+  return (
+    <>
+      {ACCOUNT_TYPE_LABELS[account.type]}
+      {account.type === "mixed" && account.rothBps !== undefined && (
+        <span className="block text-xs text-muted">{formatBps(account.rothBps)} Roth</span>
+      )}
+    </>
+  );
+}
+
+const ICON_BUTTON =
+  "inline-flex size-8 items-center justify-center rounded-lg text-ink-2 hover:bg-surface-2";
+
+function RowActions({
+  account,
+  onEdit,
+  onDuplicate,
+  onDelete,
+}: {
+  account: Account;
+  onEdit: (account: Account) => void;
+  onDuplicate: (account: Account) => void;
+  onDelete: (account: Account) => void;
+}) {
+  return (
+    <span className="flex gap-1 sm:justify-end">
+      <button
+        type="button"
+        onClick={() => onEdit(account)}
+        aria-label={`Edit ${account.name}`}
+        title="Edit"
+        className={`${ICON_BUTTON} hover:text-ink`}
+      >
+        <PencilIcon />
+      </button>
+      <button
+        type="button"
+        onClick={() => onDuplicate(account)}
+        aria-label={`Duplicate ${account.name}`}
+        title="Duplicate"
+        className={`${ICON_BUTTON} hover:text-ink`}
+      >
+        <CopyIcon />
+      </button>
+      <button
+        type="button"
+        onClick={() => onDelete(account)}
+        aria-label={`Delete ${account.name}`}
+        title="Delete"
+        className={`${ICON_BUTTON} hover:text-danger`}
+      >
+        <TrashIcon />
+      </button>
+    </span>
+  );
+}
+
 export function AccountTable({
   data,
   onEdit,
+  onDuplicate,
   onDelete,
 }: {
   data: PortfolioData;
   onEdit: (account: Account) => void;
+  onDuplicate: (account: Account) => void;
   onDelete: (account: Account) => void;
 }) {
   const [sort, setSort] = useState<Sort>({ key: "balance", dir: "desc" });
@@ -95,7 +156,7 @@ export function AccountTable({
               <th scope="col" className="hidden w-1/4 px-3 py-2 text-left font-medium sm:table-cell">
                 Allocation
               </th>
-              <th scope="col" className="py-2 pr-1 pl-0 sm:px-3">
+              <th scope="col" className="hidden px-3 py-2 sm:table-cell">
                 <span className="sr-only">Actions</span>
               </th>
             </tr>
@@ -105,16 +166,24 @@ export function AccountTable({
               <tr key={account.id} className="hover:bg-surface-2/60">
                 <th scope="row" className="px-3 py-2.5 text-left font-medium">
                   <span className="line-clamp-2 break-words sm:max-w-56">{account.name}</span>
-                  {/* On phones, type and allocation stack under the name. */}
+                  {/* On phones, type, allocation, and actions stack under the name. */}
                   <span className="mt-0.5 block text-xs font-normal text-ink-2 sm:hidden">
-                    {ACCOUNT_TYPE_LABELS[account.type]}
+                    <TypeLabel account={account} />
                   </span>
                   <span className="mt-2 block sm:hidden">
                     <MiniAllocationBar account={account} assetClasses={data.assetClasses} />
                   </span>
+                  <span className="mt-1.5 -ml-2 block sm:hidden">
+                    <RowActions
+                      account={account}
+                      onEdit={onEdit}
+                      onDuplicate={onDuplicate}
+                      onDelete={onDelete}
+                    />
+                  </span>
                 </th>
-                <td className="hidden px-3 py-2.5 whitespace-nowrap text-ink-2 sm:table-cell">
-                  {ACCOUNT_TYPE_LABELS[account.type]}
+                <td className="hidden px-3 py-2.5 text-ink-2 sm:table-cell">
+                  <TypeLabel account={account} />
                 </td>
                 <td className="px-3 py-2.5 text-right align-top whitespace-nowrap tabular-nums sm:align-middle">
                   {formatCents(account.balanceCents)}
@@ -125,25 +194,13 @@ export function AccountTable({
                 <td className="hidden px-3 py-2.5 sm:table-cell">
                   <MiniAllocationBar account={account} assetClasses={data.assetClasses} />
                 </td>
-                <td className="py-2.5 pr-1 pl-0 sm:px-3">
-                  <div className="flex justify-end gap-0.5 sm:gap-1">
-                    <button
-                      type="button"
-                      onClick={() => onEdit(account)}
-                      aria-label={`Edit ${account.name}`}
-                      className="inline-flex size-8 items-center justify-center rounded-lg text-ink-2 hover:bg-surface-2 hover:text-ink"
-                    >
-                      <PencilIcon />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onDelete(account)}
-                      aria-label={`Delete ${account.name}`}
-                      className="inline-flex size-8 items-center justify-center rounded-lg text-ink-2 hover:bg-surface-2 hover:text-danger"
-                    >
-                      <TrashIcon />
-                    </button>
-                  </div>
+                <td className="hidden px-3 py-2.5 sm:table-cell">
+                  <RowActions
+                    account={account}
+                    onEdit={onEdit}
+                    onDuplicate={onDuplicate}
+                    onDelete={onDelete}
+                  />
                 </td>
               </tr>
             ))}

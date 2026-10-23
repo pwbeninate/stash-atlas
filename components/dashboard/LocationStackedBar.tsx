@@ -5,22 +5,22 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 import { Card } from "@/components/ui/Card";
 import { Segmented } from "@/components/ui/Segmented";
 import { Swatch } from "@/components/ui/Swatch";
-import { byAccountType, byAssetClass } from "@/lib/aggregate";
+import { byAssetClass, byTaxTreatment } from "@/lib/aggregate";
 import { formatCents, formatPercent, ratio, roundedPercents } from "@/lib/money";
 import { seriesColor } from "@/lib/palette";
 import { niceTicks } from "@/lib/scale";
 import {
   ACCOUNT_TYPE_LABELS,
-  ACCOUNT_TYPE_SHORT_LABELS,
-  type AccountType,
+  TREATMENT_SHORT_LABELS,
   type PortfolioData,
+  type TaxTreatment,
 } from "@/lib/schema";
 import { ChartTooltip } from "./ChartTooltip";
 
 type Mode = "dollars" | "percent";
 
 interface Row {
-  type: AccountType;
+  type: TaxTreatment;
   label: string;
   cents: number;
   byClass: Record<string, number>;
@@ -40,12 +40,12 @@ export function LocationStackedBar({ data }: { data: PortfolioData }) {
   const held = byAssetClass(data)
     .filter((c) => c.cents > 0)
     .map((c) => classesById.get(c.key)!);
-  const types = byAccountType(data).filter((t) => t.cents > 0);
+  const types = byTaxTreatment(data).filter((t) => t.cents > 0);
 
   const rows: Row[] = types.map((t) => {
     const row: Row = {
       type: t.key,
-      label: ACCOUNT_TYPE_SHORT_LABELS[t.key],
+      label: TREATMENT_SHORT_LABELS[t.key],
       cents: t.cents,
       byClass: t.byClass,
     };
@@ -64,7 +64,7 @@ export function LocationStackedBar({ data }: { data: PortfolioData }) {
   return (
     <Card
       title="Asset location"
-      subtitle="How each account type is invested"
+      subtitle="How each tax treatment is invested"
       actions={
         <Segmented<Mode>
           label="Show bars as"
@@ -89,7 +89,7 @@ export function LocationStackedBar({ data }: { data: PortfolioData }) {
               </li>
             ))}
           </ul>
-          <div style={{ height: rows.length * 44 + 36 }} role="img" aria-label="Stacked bar chart of asset classes by account type. The location matrix below lists the same values.">
+          <div style={{ height: rows.length * 44 + 36 }} role="img" aria-label="Stacked bar chart of asset classes by tax treatment. The location matrix below lists the same values.">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={rows} layout="vertical" margin={{ top: 0, right: 24, bottom: 0, left: 0 }} barCategoryGap="28%">
                 <CartesianGrid horizontal={false} stroke="var(--line)" />

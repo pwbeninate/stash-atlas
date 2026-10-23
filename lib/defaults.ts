@@ -41,6 +41,7 @@ const SAMPLE_ACCOUNTS: {
   type: AccountType;
   balanceCents: number;
   allocation: Record<string, number>;
+  rothBps?: number;
 }[] = [
   {
     name: "Brokerage",
@@ -56,9 +57,10 @@ const SAMPLE_ACCOUNTS: {
   },
   {
     name: "Workplace 401(k)",
-    type: "traditional",
+    type: "mixed",
     balanceCents: 212_400_00,
     allocation: { "us-stocks": 5500, "intl-stocks": 2000, bonds: 2500 },
+    rothBps: 2000,
   },
   {
     name: "Roth IRA",

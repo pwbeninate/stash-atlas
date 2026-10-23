@@ -23,12 +23,17 @@ export function migrate(raw: unknown): unknown {
       `This data uses schema version ${version}, but this app only understands up to ${SCHEMA_VERSION}.`,
     );
   }
-  switch (version) {
-    case SCHEMA_VERSION:
-      return raw;
-    default:
-      throw new Error(`Unsupported schema version ${version}.`);
+  if (!Number.isInteger(version) || version < 1) {
+    throw new Error(`Unsupported schema version ${version}.`);
   }
+  let data = raw as Record<string, unknown>;
+  // Each step upgrades vN → vN+1; add new steps below as the schema grows.
+  if (data.schemaVersion === 1) {
+    // v2 added the "mixed" account type and its optional rothBps. v1 data
+    // is already valid v2 data.
+    data = { ...data, schemaVersion: 2 };
+  }
+  return data;
 }
 
 /** Validate unknown input (stored or imported) into PortfolioData. */

@@ -63,6 +63,13 @@ export const TrashIcon = (p: SVGProps<SVGSVGElement>) => (
   </Icon>
 );
 
+export const CopyIcon = (p: SVGProps<SVGSVGElement>) => (
+  <Icon {...p}>
+    <rect x="9" y="9" width="11" height="11" rx="2" />
+    <path d="M5 15V5a1 1 0 0 1 1-1h9" />
+  </Icon>
+);
+
 export const LockIcon = (p: SVGProps<SVGSVGElement>) => (
   <Icon {...p}>
     <rect x="5" y="11" width="14" height="10" rx="2" />

@@ -36,10 +36,14 @@ Use **Data → Load sample data** to explore with a fictional portfolio.
 
 ## Features
 
-- **Accounts:** add, edit, and delete. Each account has a name, an account type, a balance,
-  and an allocation entered as **percentages** (with a live "remaining" indicator) or
-  **dollar amounts** (the balance becomes their sum). An allocation that doesn't total
-  exactly 100% can't be saved.
+- **Accounts:** add, edit, duplicate, and delete. Each account has a name, an account type,
+  a balance, and an allocation entered as **percentages** (with a live "remaining"
+  indicator) or **dollar amounts** (the balance becomes their sum). An allocation that
+  doesn't total exactly 100% can't be saved.
+- **Traditional + Roth accounts:** a 401(k) or IRA that holds both kinds of money is one
+  account. Pick "Traditional + Roth 401(k)/IRA" and enter the Roth portion in $ or %. One
+  allocation applies to both parts, and the charts count each part in its own column. If
+  the two parts are invested differently, enter them as two accounts instead.
 - **Asset classes:** seven defaults that you can rename, plus custom classes. A class can
   only be removed once no account holds it.
 - **Dashboard:**
@@ -48,8 +52,9 @@ Use **Data → Load sample data** to explore with a fictional portfolio.
   - A donut chart of asset classes with an exact-value legend.
   - A stacked bar of each account type's mix, shown in $ or %.
   - **The location matrix:** asset class × account type, with dollars and percentages. A
-    toggle switches between "% of asset class" (where each asset lives) and "% of account
-    type" (what each account type holds).
+    toggle switches between "% of asset class" (where each asset lives) and "% of tax
+    treatment" (what each column holds). Columns are tax treatments: Taxable, Traditional,
+    Roth, HSA, 529, and Other.
   - A sortable account list with a mini allocation bar per account.
 - **Data:** JSON export and import, sample data, and clear-all. Every replace or clear asks
   for confirmation first.
@@ -96,7 +101,7 @@ schemas.
 
 ```ts
 PortfolioData {
-  schemaVersion: 1
+  schemaVersion: 2
   assetClasses: AssetClass[]      // ordered; order drives charts and tables
   accounts: Account[]
 }
@@ -111,9 +116,10 @@ AssetClass {
 Account {
   id: string                      // UUID
   name: string                    // 1–80 chars; no account numbers
-  type: "taxable" | "traditional" | "roth" | "hsa" | "529" | "other"
+  type: "taxable" | "traditional" | "roth" | "mixed" | "hsa" | "529" | "other"
   balanceCents: number            // integer cents, 0 … $100B
   allocation: Record<assetClassId, number>  // integer basis points; must sum to 10,000
+  rothBps?: number                // "mixed" only (and required there): Roth share in bps
   createdAt: string; updatedAt: string      // ISO timestamps
 }
 ```
@@ -123,15 +129,17 @@ Account {
 - Balances are integer **cents** and allocations are integer **basis points**
   (1 bp = 0.01%). User input is parsed from strings straight to integers, so floats never
   touch it.
-- To get per-class dollars, each account's balance is split with the **largest-remainder
-  method** (`largestRemainder` in `lib/money.ts`, using BigInt). The pieces always add up
-  to the balance exactly. Every aggregate is a sum of those integers, so the matrix rows,
-  columns, and grand total reconcile to the cent.
+- Each account is split into cells with the **largest-remainder method**
+  (`largestRemainder` in `lib/money.ts`, using BigInt). A "mixed" account's balance is
+  first split into traditional and Roth parts by `rothBps`; then each part is split by the
+  allocation (`accountCells` in `lib/aggregate.ts`). The cells always add up to the balance
+  exactly. Every aggregate is a sum of those cells, so the matrix rows, columns, and grand
+  total reconcile to the cent.
 - Displayed percentages use the same method (`roundedPercents`), so a row or column shown
   at one decimal adds up to exactly 100.0%.
-- In dollar-entry mode, amounts are converted to basis points the same way. A typed amount
-  can therefore shift by up to 0.005% of the balance; storing percentages keeps the
-  allocation intact when a balance changes or is $0.
+- In dollar-entry mode, amounts (including a Roth portion typed in dollars) are converted
+  to basis points the same way. A typed amount can therefore shift by up to 0.005% of the
+  balance; storing percentages keeps the allocation intact when a balance changes or is $0.
 
 ### Storage and versioning
 
@@ -141,7 +149,8 @@ Account {
   validation (`parsePortfolio` in `lib/storage.ts`).
 - To change the schema:
   1. Bump `SCHEMA_VERSION`.
-  2. Add a `case` in `migrate()` that upgrades the previous version.
+  2. Add a step in `migrate()` that upgrades the previous version. (v1 → v2 added the
+     "mixed" account type; v1 data needed no changes beyond the version number.)
   3. Update the schema.
 - Files from a newer version are rejected with a clear message.
 - If stored data is unreadable, the app starts fresh and keeps the original under
@@ -155,11 +164,13 @@ Account {
 
 - **Aggregation edge cases:** an empty portfolio, $0 accounts, an all-$0 portfolio (no NaN),
   a single account, 100% in one asset class, unused classes, and odd-cent thirds where every
-  matrix row, column, and total must reconcile exactly.
+  matrix row, column, and total must reconcile exactly. Traditional + Roth accounts are
+  tested at 0%, 100%, and odd-cent splits.
 - **Parsing:** dollar and percent input, plus formatting.
-- **Form validation:** under or over 100%, bad input, dollar mode, and switching between
-  modes.
-- **Schema and import validation:** unknown classes, duplicate ids, and future versions.
+- **Form validation:** under or over 100%, bad input, dollar mode, switching between
+  modes, and the Roth portion (in $ or %, capped at the balance).
+- **Schema and import validation:** unknown classes, duplicate ids, the Roth share rules,
+  v1 → v2 migration, and future versions.
 - **Storage:** export/import round trips and the storage helpers.
 
 ## Ideas for v2
@@ -167,7 +178,7 @@ Account {
 The current design leaves room for each of these:
 
 - **Target allocation and drift.** Add `targets: Record<assetClassId, bps>` to the
-  portfolio (a migration to schemaVersion 2). Drift is `byAssetClass` share minus target,
+  portfolio (a migration to schemaVersion 3). Drift is `byAssetClass` share minus target,
   shown as a diverging bar.
 - **Per-holding entry.** Add optional `holdings: { ticker, amountCents, assetClassId }[]` to
   an account and derive `allocation` from it. A ticker → asset class map could start as a
@@ -175,6 +186,9 @@ The current design leaves room for each of these:
 - **Asset location hints.** These would be informational only, for example noting where bonds
   sit relative to tax-advantaged space. They'd be built on `locationMatrix`, which already
   exposes the row and column shares.
+- **More contribution sources.** After-tax (non-Roth) 401(k) money, as used for "mega
+  backdoor Roth" conversions, could become a third part of a mixed account. Plans that let
+  each source hold different funds could get a per-source allocation.
 - **Historical snapshots.** Add `snapshots: { date, accounts }[]` and a net-worth trend line.
   The aggregate functions take plain data, so they work on any snapshot.
 - **Storage.** Move to IndexedDB if snapshots make the data large, and optionally add

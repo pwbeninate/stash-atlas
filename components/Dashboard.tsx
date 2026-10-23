@@ -37,7 +37,7 @@ interface Confirm {
 }
 
 type Modal =
-  | { kind: "account"; account: Account | null }
+  | { kind: "account"; account: Account | null; template?: Account }
   | { kind: "assetClasses" }
   | { kind: "confirm"; confirm: Confirm }
   | { kind: "importError"; fileName: string; errors: string[] }
@@ -168,6 +168,7 @@ export function Dashboard() {
           <AccountTable
             data={data}
             onEdit={(account) => setModal({ kind: "account", account })}
+            onDuplicate={(template) => setModal({ kind: "account", account: null, template })}
             onDelete={(account) =>
               confirm({
                 title: "Delete account?",
@@ -186,6 +187,7 @@ export function Dashboard() {
       <AccountDialog
         open={modal?.kind === "account"}
         account={modal?.kind === "account" ? modal.account : null}
+        template={modal?.kind === "account" ? (modal.template ?? null) : null}
         data={data}
         onClose={close}
       />

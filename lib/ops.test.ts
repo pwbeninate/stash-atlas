@@ -37,6 +37,14 @@ describe("accounts", () => {
     expect(parsePortfolio(data).ok).toBe(true);
     expect(deleteAccount(data, "a1").accounts).toEqual([]);
   });
+
+  it("drops the Roth share when an account stops being mixed", () => {
+    let data = addAccount(emptyPortfolio(), { ...fields, type: "mixed", rothBps: 4000 }, T1, "m");
+    expect(data.accounts[0].rothBps).toBe(4000);
+    data = updateAccount(data, "m", fields, T2);
+    expect(data.accounts[0]).not.toHaveProperty("rothBps");
+    expect(parsePortfolio(data).ok).toBe(true);
+  });
 });
 
 describe("asset classes", () => {
