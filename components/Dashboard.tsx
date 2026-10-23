@@ -3,6 +3,10 @@
 import { useState } from "react";
 import { AccountDialog } from "@/components/accounts/AccountDialog";
 import { AccountTable } from "@/components/dashboard/AccountTable";
+import { AllocationDonut } from "@/components/dashboard/AllocationDonut";
+import { LocationMatrix } from "@/components/dashboard/LocationMatrix";
+import { LocationStackedBar } from "@/components/dashboard/LocationStackedBar";
+import { SummaryCards } from "@/components/dashboard/SummaryCards";
 import { EmptyState } from "@/components/EmptyState";
 import { AssetClassDialog } from "@/components/settings/AssetClassDialog";
 import { Button } from "@/components/ui/Button";
@@ -60,6 +64,12 @@ export function Dashboard() {
 
       {hasAccounts ? (
         <div className="space-y-6">
+          <SummaryCards data={data} />
+          <div className="grid gap-6 lg:grid-cols-2">
+            <AllocationDonut data={data} />
+            <LocationStackedBar data={data} />
+          </div>
+          <LocationMatrix data={data} />
           <AccountTable
             data={data}
             onEdit={(account) => setModal({ kind: "account", account })}
