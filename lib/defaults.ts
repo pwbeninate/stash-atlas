@@ -13,7 +13,7 @@ export const DEFAULT_ASSET_CLASSES: AssetClass[] = [
   { id: "cash", name: "Cash", colorIndex: 3, builtIn: true },
   { id: "real-estate", name: "Real Estate", colorIndex: 4, builtIn: true },
   { id: "crypto", name: "Crypto", colorIndex: 5, builtIn: true },
-  { id: "other", name: "Other", colorIndex: 6, builtIn: true },
+  { id: "other", name: "Other", colorIndex: 8, builtIn: true },
 ];
 
 export function newId(): string {

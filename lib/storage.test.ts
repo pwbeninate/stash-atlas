@@ -144,6 +144,6 @@ describe("allocation helpers", () => {
   });
 
   it("assigns colors to new classes without collisions", () => {
-    expect(nextColorIndex(emptyPortfolio().assetClasses)).toBe(7);
+    expect(nextColorIndex(emptyPortfolio().assetClasses)).toBe(6);
   });
 });
