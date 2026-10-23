@@ -57,13 +57,13 @@ export function AccountTable({
     );
   }
 
-  function header(key: SortKey, label: string, align: "left" | "right" = "left") {
+  function header(key: SortKey, label: string, className = "text-left") {
     const active = sort.key === key;
     return (
       <th
         scope="col"
         aria-sort={active ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}
-        className={`px-3 py-2 font-medium ${align === "right" ? "text-right" : "text-left"}`}
+        className={`px-3 py-2 font-medium ${className}`}
       >
         <button
           type="button"
@@ -82,20 +82,20 @@ export function AccountTable({
       title="Accounts"
       subtitle={`${data.accounts.length} account${data.accounts.length === 1 ? "" : "s"}`}
     >
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[34rem] text-sm">
+      <div className="relative overflow-x-auto">
+        <table className="w-full text-sm">
           <thead className="border-b border-line text-xs text-ink-2">
             <tr>
               {header("name", "Name")}
-              {header("type", "Type")}
-              {header("balance", "Balance", "right")}
+              {header("type", "Type", "hidden text-left sm:table-cell")}
+              {header("balance", "Balance", "text-right")}
               <th scope="col" className="hidden px-3 py-2 text-right font-medium md:table-cell">
                 Share
               </th>
-              <th scope="col" className="w-1/4 px-3 py-2 text-left font-medium">
+              <th scope="col" className="hidden w-1/4 px-3 py-2 text-left font-medium sm:table-cell">
                 Allocation
               </th>
-              <th scope="col" className="px-3 py-2">
+              <th scope="col" className="py-2 pr-1 pl-0 sm:px-3">
                 <span className="sr-only">Actions</span>
               </th>
             </tr>
@@ -103,23 +103,30 @@ export function AccountTable({
           <tbody className="divide-y divide-line">
             {rows.map((account) => (
               <tr key={account.id} className="hover:bg-surface-2/60">
-                <th scope="row" className="max-w-48 truncate px-3 py-2.5 text-left font-medium">
-                  {account.name}
+                <th scope="row" className="px-3 py-2.5 text-left font-medium">
+                  <span className="line-clamp-2 break-words sm:max-w-56">{account.name}</span>
+                  {/* On phones, type and allocation stack under the name. */}
+                  <span className="mt-0.5 block text-xs font-normal text-ink-2 sm:hidden">
+                    {ACCOUNT_TYPE_LABELS[account.type]}
+                  </span>
+                  <span className="mt-2 block sm:hidden">
+                    <MiniAllocationBar account={account} assetClasses={data.assetClasses} />
+                  </span>
                 </th>
-                <td className="px-3 py-2.5 whitespace-nowrap text-ink-2">
+                <td className="hidden px-3 py-2.5 whitespace-nowrap text-ink-2 sm:table-cell">
                   {ACCOUNT_TYPE_LABELS[account.type]}
                 </td>
-                <td className="px-3 py-2.5 text-right whitespace-nowrap tabular-nums">
+                <td className="px-3 py-2.5 text-right align-top whitespace-nowrap tabular-nums sm:align-middle">
                   {formatCents(account.balanceCents)}
                 </td>
                 <td className="hidden px-3 py-2.5 text-right tabular-nums text-ink-2 md:table-cell">
                   {formatPercent(ratio(account.balanceCents, total) * 100)}
                 </td>
-                <td className="px-3 py-2.5">
+                <td className="hidden px-3 py-2.5 sm:table-cell">
                   <MiniAllocationBar account={account} assetClasses={data.assetClasses} />
                 </td>
-                <td className="px-3 py-2.5">
-                  <div className="flex justify-end gap-1">
+                <td className="py-2.5 pr-1 pl-0 sm:px-3">
+                  <div className="flex justify-end gap-0.5 sm:gap-1">
                     <button
                       type="button"
                       onClick={() => onEdit(account)}

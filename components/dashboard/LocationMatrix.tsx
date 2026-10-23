@@ -87,7 +87,7 @@ export function LocationMatrix({ data }: { data: PortfolioData }) {
             </div>
           </div>
 
-          <div className="overflow-x-auto rounded-xl border border-line">
+          <div className="relative overflow-x-auto rounded-xl border border-line">
             <table className="w-full border-collapse text-sm" onMouseLeave={() => setHover(null)}>
               <caption className="sr-only">
                 Dollar value and percentage of each asset class held in each account type. {EXPLAIN[norm]}
@@ -126,11 +126,11 @@ export function LocationMatrix({ data }: { data: PortfolioData }) {
                     <tr key={row.assetClassId} className="border-b border-line last:border-b-0">
                       <th
                         scope="row"
-                        className={`sticky left-0 z-[1] bg-surface px-3 py-2 text-left font-medium whitespace-nowrap transition-colors ${
+                        className={`sticky left-0 z-[1] w-32 bg-surface px-3 py-2 text-left font-medium transition-colors sm:w-auto sm:whitespace-nowrap ${
                           rowHovered ? "text-ink" : ""
                         }`}
                       >
-                        <span className="flex items-center gap-2">
+                        <span className="flex items-center gap-2 leading-snug">
                           <Swatch colorIndex={assetClass.colorIndex} />
                           {assetClass.name}
                         </span>
