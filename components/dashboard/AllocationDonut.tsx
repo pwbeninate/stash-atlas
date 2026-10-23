@@ -59,6 +59,8 @@ export function AllocationDonut({ data }: { data: PortfolioData }) {
                   isAnimationActive={false}
                 />
                 <Tooltip
+                  // Keep the tooltip above the absolutely positioned center label.
+                  wrapperStyle={{ zIndex: 10 }}
                   content={({ active, payload }) => {
                     const slice = payload?.[0]?.payload as Slice | undefined;
                     if (!active || !slice) return null;
