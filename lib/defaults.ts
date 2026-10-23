@@ -90,8 +90,8 @@ const SAMPLE_ACCOUNTS: {
 export function samplePortfolio(now: Date = new Date()): PortfolioData {
   const timestamp = now.toISOString();
   const accounts: Account[] = SAMPLE_ACCOUNTS.map((a) => ({
-    ...a,
     id: newId(),
+    ...a,
     createdAt: timestamp,
     updatedAt: timestamp,
   }));

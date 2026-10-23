@@ -11,7 +11,7 @@ export function addAccount(
   id: string = newId(),
 ): PortfolioData {
   const timestamp = now.toISOString();
-  const account: Account = { ...fields, id, createdAt: timestamp, updatedAt: timestamp };
+  const account: Account = { id, ...fields, createdAt: timestamp, updatedAt: timestamp };
   return { ...data, accounts: [...data.accounts, account] };
 }
 

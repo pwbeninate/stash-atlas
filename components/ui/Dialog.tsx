@@ -49,7 +49,7 @@ export function Dialog({
     >
       {open && (
         <div className="flex max-h-[calc(100dvh-2rem)] flex-col">
-          <header className="border-b border-line px-5 pt-5 pb-4">
+          <header className={`px-5 pt-5 pb-4 ${children ? "border-b border-line" : ""}`}>
             <h2 id={titleId} className="text-lg font-semibold">
               {title}
             </h2>
@@ -61,7 +61,7 @@ export function Dialog({
           </header>
           {children && <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>}
           {footer && (
-            <footer className="flex flex-wrap justify-end gap-2 border-t border-line px-5 py-4">
+            <footer className={`flex flex-wrap justify-end gap-2 px-5 py-4 ${children ? "border-t border-line" : "pt-1"}`}>
               {footer}
             </footer>
           )}

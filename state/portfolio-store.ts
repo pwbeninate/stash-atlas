@@ -113,6 +113,19 @@ export function setPortfolio(data: PortfolioData) {
   emit();
 }
 
+/** Remove everything Stash Atlas stored and start from the defaults. */
+export function resetPortfolio() {
+  const store = storage();
+  try {
+    store?.removeItem(STORAGE_KEY);
+    store?.removeItem(CORRUPT_BACKUP_KEY);
+  } catch {
+    // Nothing more we can do; the in-memory copy is still reset.
+  }
+  snapshot = { status: "ready", data: emptyPortfolio(), loadErrors: null, saveError: null };
+  emit();
+}
+
 /** Apply a change to the current portfolio. */
 export function updatePortfolio(change: (data: PortfolioData) => PortfolioData) {
   const current = getSnapshot();
